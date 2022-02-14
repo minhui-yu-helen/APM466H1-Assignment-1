@@ -1,0 +1,979 @@
+---
+title: "APM466H1 Assignment 1"
+author: 'Minhui Yu, Student Number: 1005414151'
+date: "February 2022"
+output:
+  pdf_document: default
+---
+
+## Fundamental Questions - 25 points
+
+  1. (a) If a country's currency issuing institutions issue more money than necessary without a corresponding increase in productivity, that is, the production of goods does not increase accordingly, then due to supply and demand, more money will have to be used to buy goods, and the currency will depreciate in the international view.
+  
+     (b) In long term part, if forward rate equals to spot rate, -- i.e spot rate does not change in long term, that is $f_{t-i,\ t}, \ s_t \ and \ s_{t-i}$ in $(1 + \frac{f_{t-i,\ t}}{2})^{t-(t-i)} = \frac{(1+s_t)^t}{(1+s_{t-i})^{t-i}}$ are equal, then the yield curve will flatten. 
+    
+     (c) Quantitative easing is similar to printing money indirectly, because when zero or near-zero interest rates are in place, the central bank buys long-term bonds, such as Treasury bonds, to flood the market with liquidity and encourage spending and borrowing. The (US) Fed provides credit support to households, small businesses and major employers, and allows unlimited purchases of TREASURIES and agency mortgage-backed securities (MBS) on demand.
+  
+  2. I choose "CAN 0.5 Feb.28.22", "CAN 2.75 May.31.22", "CAN 1.75 Feb.28.23", "CAN 1.5 May.31.23", "CAN 2.25 Feb.29.24", "CAN 1.5 Aug.31.24", "CAN 1.25 Feb.28.25", "CAN 0.5 Aug.31.25", "CAN 0.25 Feb.28.26", "CAN 1 Aug.31.26" and "CAN 1.25 Feb.28.27" (refers to the Canadian Government bond with a maturity in Month day, year and a coupon of c). First I choose to use the bonds with maturity 3-10 years, then I collected the data in 2022.01.10-2022.01.14 and 2022.01.17-2022.01.21. I noticed that most of the bonds have maturity 02.28-29 and 08.30-31 with 5-year term. Since we want to construct a “0-5 year” yield and spot curves with 10-11 bonds, the ideal interval for years until maturity of each bond should be: 0-0.5 year, 0.5-1, 1-1.5, \dots, 4.5-5 year and 5+ year. So I choose all the bonds with 5-year term and find that there are two missing 5-year bond in 0.5-1 and 1-1.5 year. Thus we use two 10-year bond whose maturity date are in 0-1 and 1-2 year respectively instead.
+  
+  3. First of all, PCA is if we have an n-dimensional data set with m data, and 2e want to reduce the dimension from the n down to k dimension. Ideally output is the data set with k dimension and m data to represent the original data set as much as possible. Let A be an n $\times$ n  covariance matrix, and we have $Ax = \lambda x \Rightarrow (A - \lambda I) x = 0$ where $\lambda$ is the eigenvalue and x is the eigenvector. The eigenvalues and the eigenvectors are the solution for the function above. $x \rightarrow y = Ax$ implies: x can be transformed to y by A. That is the eigenvector corresponding to the eigenvalue is the ideal coordinate axis, and the eigenvalue is equal to the variance of the corresponding dimension of the data in the rotated coordinates. The value of eigenvalues represents the contribution of corresponding eigenvectors to the whole matrix after orthogonalization. When we solve the eigenvalues and eigenvectors we sort the eigenvalues first. The larger the eigenvalues are, the more relevant the corresponding eigenvectors are in the data set.
+  
+\newpage
+
+## Empirical Questions - 75 points
+
+### 4.
+  
+```{r, echo = FALSE, message = FALSE}
+# loading tidyverse and readxl libraries
+library(xlsx)
+library(tidyverse)
+# for beautiful table install kableExtra
+#install.packages("kableExtra")
+# For dev version
+# install.packages("devtools")
+#devtools::install_github("haozhu233/kableExtra")
+library(kableExtra)
+# read the data for following questions 
+data <- read.xlsx("/Users/helen/Documents/Courses/MATH/APM466H1/Assignment 1/APM466H1-Assignment-1.xlsx", 1)
+# clean the name of each column
+data <- data %>% janitor::clean_names()
+# get the number of coupon payments per year (same for all bonds)
+freq <- data$no_of_payments_per_year[1]
+
+# let's calculate the term for each bond
+# convert the character to class "Date" representing calendar dates
+data$issue_date <- as.Date(data$issue_date, format)
+data$maturity_date <- as.Date(data$maturity_date, format)
+data$coupon_payment_date <- as.Date(data$coupon_payment_date, format)
+# create variable term with same length as the column in data has
+term_years <- numeric(length(data$name))
+# use for loop to find term for each bond
+for (i in 1:length(data$name)){
+  # calculate the number of years between issue_date and maturity_date in the same row
+  term_years[i] <- length(seq(data$issue_date[i], data$maturity_date[i], by = "years")) - 1
+}
+# add term into data as a new column
+data <- cbind(data, term_years)
+```
+
+
+```{r, message = FALSE, echo = FALSE, message = FALSE}
+# select the 11 samples of bonds with term = 5 years or maturity data is in 2022 or 2023
+data <- data %>% filter(term_years == 5 | format(data$maturity_date, format = "%Y") %in% c("2022", "2023")) %>%
+  # select the useful information and data
+  select(name, coupon, issue_date, maturity_date, coupon_payment_date, x44571, x44572, x44573, x44574, x44575, x44576, x44577, x44578, x44579, x44580, term_years)
+# change the type of the variables that should be numerical but before changing they are character
+data[,c(6:15)] <-as.data.frame(lapply(data[,c(6:15)], as.numeric))
+# change the name of each bond with convention
+# Sys.setlocale("LC_TIME", "C")
+# change the type of date from xxxx-xx-xx to short for month.day.year
+date_part <- format(as.Date(data$maturity_date), format = "%b.%d.%y")
+# i.e x in coupon_part refers to a coupon of x(%)
+coupon_part <- data$coupon * 100
+# finally we can change the name of each bond
+data$name <- paste("CAN", coupon_part, date_part, sep = " ", collapse = NULL)
+# reorder the 11 bonds by the maturity date
+data <- data[order(data$maturity_date), ]
+```
+
+```{r, echo = FALSE, message = FALSE}
+# note: format xxxx-xx-xx is related to close price and format xxxx/xx/xx is related to dirty price
+
+# rename the columns of close price in data
+names(data)[6:15] <- c("2022-01-10", "2022-01-11", "2022-01-12", "2022-01-13", "2022-01-14", "2022-01-17", "2022-01-18", "2022-01-19", "2022-01-20", "2022-01-21")
+
+# create a vector data that made up of dates that we collected data
+dates <- c("2022/01/10", "2022/01/11", "2022/01/12", "2022/01/13", "2022/01/14", "2022/01/17", "2022/01/18", "2022/01/19", "2022/01/20", "2022/01/21")
+# convert the character to class "Date" representing calendar dates
+today <- as.Date(dates, format = "%Y/%m/%d")
+```
+
+
+```{r, echo = FALSE, message = FALSE}
+# to calculate YTM, we need to find the dirty price first
+# note: dirty price = accrued interest + clean price, and clean price is the price we already had
+# let's focus on accrued interest = n/360 * annual coupon rate
+# here n is the # of days since the last coupon payments
+# note: interest is calculated for 360 days per year and 30 days per month
+
+# create two empty matrix to store days_last_payment, accrued_interest and dirty_price
+# all of them are 11*10
+days_last_payment <- matrix(0, nrow = length(data$name), ncol = length(dates), byrow=TRUE)
+accrued_interest <- matrix(0, nrow = length(data$name), ncol = length(dates), byrow=TRUE)
+dirty_price <- matrix(0, nrow = length(data$name), ncol = length(dates), byrow=TRUE)
+
+# just for clarify:
+# give the row name of days_last_payment, accrued_interest and dirty_price
+rownames(days_last_payment) <- data$name
+rownames(accrued_interest) <- data$name
+rownames(dirty_price) <- data$name
+# give the column name of days_last_payment, accrued_interest and dirty_price 
+# (actually only column names of dirty_price is useful 
+# -- for step of rename after adding dirty_price to data)
+colnames(days_last_payment)  <- dates
+colnames(accrued_interest)  <- dates
+colnames(dirty_price)  <- dates
+
+# use for loop to calculate the accrued interest for each day and for each bond 
+# which are based on the corresponding number of days since last coupon payment
+for (i in 1:length(today)) {
+  for (j in 1:length(data$name)) {
+    # calculate the # days since last payment between ith "today" and jth "coupon payment date"
+    days_last_payment[j, i] = 180 - (length(seq(today[i], data$coupon_payment_date[j], by = "day")) - 1)
+    # accrued interest = n/360 * annual coupon payment
+    accrued_interest[j, i] = round(days_last_payment[j, i] * data[j, 2] * 100 / 360, 6)
+    # dirty price = accrued interest + clean price
+    dirty_price[j, i] = round(data[j, 5 + i] + accrued_interest[j, i], 3)
+  }
+  # add column of dirty_price to data
+  data <- cbind(data, dirty_price[, i])
+  # rename the adding columns
+  names(data)[i+16] <- colnames(dirty_price)[i]
+}
+```
+
+```{r, echo = FALSE, message = FALSE}
+# this part shows the steps for YTM calculation
+# recall: P_i = \sum_{i = 1}^{n} cash \ flow _i \times (1 + \frac{r(t_i)}{2})^{(-t_i \times 2)}
+# where P is the dirty price, p_i is the close price, r(t_i) is the zero coupon rate in time t_i
+# and t_i is the remaining maturity from now (counted by year)
+
+# create time interval as assumption that 
+# each bond set in an interval [i, i+0.5] where i = {0.5, 1, ..., 4.5, 5} 
+time_interval <- c("0-0.5", "0.5-1", "1-1.5", "1.5-2", "2-2.5", "2.5-3", "3-3.5", "3.5-4", "4-4.5", "4.5-5", "5+")
+
+# set up a standardized date -- 2022.01.22
+sd_date <- "2022-01-21"
+sd_date <- as.Date(sd_date, format = "%Y-%m-%d")
+
+# we want t_i which is years until maturity
+# for convenience let's calculate days first and divided by 360 to get years_until_maturity
+# days until maturity = maturity date - standardized date
+
+# create an empty 1*11 matrix for storing years_until_maturity
+years_until_maturity <- matrix(0, nrow = length(data$name), ncol = length(dates), byrow=TRUE)
+# give the row & the column name of years_until_maturity
+rownames(years_until_maturity) <- time_interval
+colnames(years_until_maturity)  <- dates
+# use for loop to calculate the years between sd_date and maturity date of each bond
+for (i in 1:length(data$maturity_date)){
+  years_until_maturity[i,] <-  round((length(seq(sd_date, data$maturity_date[i], by = "day")) - 1) / 360, 3)
+  for (j in 1:length(dates)-1) {
+    years_until_maturity[i, j] <-  round(years_until_maturity[i, j] - 1/360*(11-j), 3)
+  }
+}
+
+# the ideal interval for years_until_maturity of each bond should be:
+# 0-0.5 year, 0.5-1 year, 1-1.5 year, 1.5-2 year, 2-2.5 year, 2.5-3 year
+# 3-3.5 year, 3.5-4 year, 4-4.5 year, 4.5-5 year, 5+ year
+# however since we had two missing 5-year bond, we do not have years_until_maturity in:
+# 0.5-1 year and 1.5-2 year
+# since we want to keep our thought, we assume that they has the position in 0.5-1 year and 1.5-2 year
+# however when we do calculations we need to pay attention to find thier real cash flow, ytm, ect.
+
+# all of the bonds has face value equals to 100
+face_value = 100
+# create a 11*11 matrix for cash_flow 
+cash_flow <- matrix(0, nrow = length(data$name), ncol = length(time_interval), byrow=TRUE)
+# give the row & the column name of cash_flow
+rownames(cash_flow) <- data$name
+colnames(cash_flow)  <- time_interval
+
+# create an empty vector cpn for storing coupon payment  with length equals to number of bonds
+cpn <- numeric(length(data$name))
+# calculate coupon payment and cash flow for the 11 bonds 
+for (i in 1:(length(data$coupon))){
+  # coupon payment = coupon rate * face value / number of coupon payments per year
+  # recall that all of the bonds has 2 coupon payments per year
+  cpn[i] <- data$coupon[i] * face_value / freq
+  # calculate the cash flow for each bond in each time interval
+  for (j in 1:length(time_interval)){
+    # consider 3 cases
+    if (j < i & i != 2 & i != 4) {
+      # before maturity date, cash flow only contains coupon payment
+      # and the first period also will receive coupon payment
+      cash_flow[i, j] <- cpn[i]
+      # during the maturity date, cash flow contains coupon payment and face value of the bond
+    } else if (j == i & i != 2 & i != 4) {
+      cash_flow[i, j] <- cpn[i] + face_value
+    } # since the years until maturity for "CAN 2.75 May.31.22" is also in [0, 0.5]]
+      # so cash flow here has the same situation as "CAN 0.5 Feb.28.22"
+      else if (j < i & i == 2) {
+      cash_flow[i, j] <- cpn[i] + face_value
+    } # since the years until maturity for "CAN 1.5 May.31.23" is also in [1, 1.5]
+      # so cash flow here has the same situation as "CAN 1.75 Feb.28.23"
+      else if (j < i-1 & i == 4) {
+      cash_flow[i, j] <- cpn[i]
+    } else if (j == i-1 & i == 4) {
+      cash_flow[i, j] <- cpn[i] + face_value
+    } ## for other situation, since maturity date has passed, then cash flow are all 0
+      else {
+      cash_flow[i, j] = 0
+    }
+  }
+}
+
+# now we can calculate ytm (yeah!!)
+# create a 11*10 matrix for storing ytm
+ytm <- matrix(0, nrow = length(data$name), ncol = length(dates), byrow=TRUE)
+# give the row & the column name of ytm
+rownames(ytm) <- time_interval
+colnames(ytm)  <- dates
+# recall: P_i = sum(cash_flow_i / (1+r/2)^(2*t_i))
+# where r is the ytm, P_i represents the dirty price and t_i is the years until maturity
+# use for loop to calculate ytm
+for (i in 1:length(data$name)) for (j in 1:length(dates)){
+  # let f(r) = P_ij - sum(cash_flow_i * (1+r/2)^(2*t_i))
+  # i represents the ith bond and j represents the jth date that we collected data
+  # uniroot() is a function in R that used to find the solution of the equation
+  # i.e. solve r for f(r) = 0
+  if (i == 1) {
+    ytm[i,j] <- uniroot(function(r) dirty_price[1, j] - 
+                          cash_flow[i,1] * (1 + r/2)^(- years_until_maturity[1,j] * 2), 
+                        c(-1, 1))$root
+  } # since the years until maturity for "CAN 2.75 May.31.22" is also in [0, 0.5]
+    # so ytm here has the same situation as "CAN 0.5 Feb.28.22"
+    else if (i == 2) {
+    ytm[i,j] <- uniroot(function(r) dirty_price[2, j] - 
+                          cash_flow[i,1] * (1 + r/2)^(- years_until_maturity[2,j] * 2), 
+                        c(-1, 1))$root
+  } # since the years until maturity for "CAN 1.5 May.31.23" is also in [1, 1.5]
+    # so ytm here has the same situation as "CAN 1.75 Feb.28.23"
+    else if (i == 4) {
+    ytm[i,j] <-  uniroot(function(r) dirty_price[i, j] - 
+                           cash_flow[i, 1] * (1 + r/2)^(- years_until_maturity[1,j] * 2) -
+                           cash_flow[i, 2] * (1 + r/2)^(- years_until_maturity[2,j] * 2) -
+                           cash_flow[i, 3] * (1 + r/2)^(- years_until_maturity[4,j] * 2), 
+                         c(-1, 1))$root
+  } else {
+    ytm[i, j] <- uniroot(function(r) dirty_price[i, j] - sum(cash_flow[i,] * (1 + r/2)^(- years_until_maturity[,j] * 2)), c(-1, 1))$root
+  }
+}
+
+# add ytm in data by column
+for (i in 1:length(dates)){
+  # add each column of ytm to data
+  data <- cbind(data, ytm[, i])
+}
+# rename the adding columns
+names(data)[27: 36] <- c("ytm_0110", "ytm_0111", "ytm_0112", "ytm_0113", "ytm_0114", "ytm_0117", "ytm_0118", "ytm_0119", "ytm_0120", "ytm_0121")
+
+# create year from 0.5 to 5.5
+year <- seq(0.5, 5.5, by = 0.5)
+# add year in data by column
+data <- cbind(data, year)
+
+# add years_until_maturity in data by column
+for (i in 1:length(dates)){
+  # add each column of ytm to data
+  data <- cbind(data, years_until_maturity[,i])
+}
+# rename the adding columns
+names(data)[38: 47] <- c("years_until_maturity_0110", "years_until_maturity_0111",
+                         "years_until_maturity_0112", "years_until_maturity_0113",
+                         "years_until_maturity_0114", "years_until_maturity_0117",
+                         "years_until_maturity_0118", "years_until_maturity_0119",
+                         "years_until_maturity_0120", "years_until_maturity_0121")
+
+```
+
+#### (a) 
+
+This part shows the steps for YTM calculation. 
+
+Recall: 
+$$P_n = cash \ flow_1 \times (1 + \frac{r_1}{2})^{-2 t_1} + cash \ flow_2 \times (1 + \frac{r_2}{2})^{-2 t_2} + \cdots $$ 
+where P is the dirty price, $p_i$ is the cash flow in period $t_i$, $r(t_i)$ is the yield to maturity we want and $t_i$ is the remaining maturity from now (counted by year).
+
+Based on the bonds we selected, the ideal interval for years until maturity of each bond should be: 0-0.5 year, 0.5-1 year, 1-1.5 year, 1.5-2 year, 2-2.5 year, 2.5-3 year, 3-3.5 year, 3.5-4 year, 4-4.5 year, 4.5-5 year and 5+ year. However since we had two missing 5-year bond, and we use two 10-year bond instead of the two missing 5-year bond. So we do not have years until maturity in: 0.5-1 year and 1.5-2 year in this case. We want to keep our thought, them we assume that they has the position in 0.5-1 year and 1.5-2 year. Nevertheless when we do calculations we need to pay attention to their real years until maturity to find their cash flow, ytm, ect. 
+
+Recall: $Dirty Price: P_i = accrued \ interest + Clean \ Price = n/360 * annual \ coupon \ payment$ where n is number of days since last payment between "today" and coupon payment date. 
+
+$$ 
+\begin{aligned}
+coupon \ payment & = \frac{annual \ coupon \ rate \times face \ value}{number \ of \ coupon \ payments \ per \ year} \\
+Cash \ Flow_i & =
+\begin{cases}
+coupon \ payment, & i<years \ until \ maturity \\
+coupon \ payment + face \ value , & i=years \ until \ maturity
+\end{cases}
+\end{aligned}
+$$
+
+Thus we have: 
+
+```{r, echo = FALSE, message = FALSE}
+round(ytm, 4) %>% kable(caption = "Bonds’ Yield (YTM) from the selected 11 Bonds") %>% kable_styling("responsive", font_size = 6, full_width = T)
+```
+
+With the ytm in table 1 above, we can plot the yield curve now (by concatenating YTM with different years until maturity on the same date): 
+            
+```{r, echo = FALSE, message = FALSE, fig.width=11, fig.height=5, fig.cap = "5-Year Yield Curve for the Selected 11 Bonds"}
+# plot the 5-year yield to maturity as a line chart for 11 bonds 
+data %>% ggplot(aes(x = years_until_maturity_0110, y = ytm_0110, color = "2022-01-10")) +
+  # add points for ytm_0110  and set size
+  geom_point(size = 1) +
+  # add the rest of the ytm data as well, each with unit and same size
+  geom_point(data = data, aes(x = years_until_maturity_0111, y = ytm_0111, color = "2022-01-11"), size = 1) +
+  geom_point(data = data, aes(x = years_until_maturity_0112, y = ytm_0112, color = "2022-01-12"), size = 1) +
+  geom_point(data = data, aes(x = years_until_maturity_0113, y = ytm_0113, color = "2022-01-13"), size = 1) +
+  geom_point(data = data, aes(x = years_until_maturity_0114, y = ytm_0114, color = "2022-01-14"), size = 1) +
+  geom_point(data = data, aes(x = years_until_maturity_0117, y = ytm_0117, color = "2022-01-17"), size = 1) +
+  geom_point(data = data, aes(x = years_until_maturity_0118, y = ytm_0118, color = "2022-01-18"), size = 1) +
+  geom_point(data = data, aes(x = years_until_maturity_0119, y = ytm_0119, color = "2022-01-19"), size = 1) +
+  geom_point(data = data, aes(x = years_until_maturity_0120, y = ytm_0120, color = "2022-01-20"), size = 1) + 
+  geom_point(data = data, aes(x = years_until_maturity_0121, y = ytm_0121, color = "2022-01-21"), size = 1) +
+  # add line for ytm_0110  and set size
+  geom_line(size = 0.3) +
+  # add the rest of the ytm data as well, each with unit and same size
+  geom_line(data = data, aes(x = years_until_maturity_0111, y = ytm_0111, color = "2022-01-11"), size = 0.3) +
+  geom_line(data = data, aes(x = years_until_maturity_0112, y = ytm_0112, color = "2022-01-12"), size = 0.3) +
+  geom_line(data = data, aes(x = years_until_maturity_0113, y = ytm_0113, color = "2022-01-13"), size = 0.3) +
+  geom_line(data = data, aes(x = years_until_maturity_0114, y = ytm_0114, color = "2022-01-14"), size = 0.3) +
+  geom_line(data = data, aes(x = years_until_maturity_0117, y = ytm_0117, color = "2022-01-17"), size = 0.3) +
+  geom_line(data = data, aes(x = years_until_maturity_0118, y = ytm_0118, color = "2022-01-18"), size = 0.3) +
+  geom_line(data = data, aes(x = years_until_maturity_0119, y = ytm_0119, color = "2022-01-19"), size = 0.3) +
+  geom_line(data = data, aes(x = years_until_maturity_0120, y = ytm_0120, color = "2022-01-20"), size = 0.3) +
+  geom_line(data = data, aes(x = years_until_maturity_0121, y = ytm_0121, color = "2022-01-21"), size = 0.3) +
+  # set the caption and the title of  x & y axis
+  labs(x = "Year",  
+       y = "Yield to Maturity",
+       caption = "Created by Minhui Yu in APM466/MAT1856, Winter 2022") +
+  # delete the title of the legend
+  guides(color = guide_legend(title = NULL)) +
+  # change the name of each legend to related date
+  scale_color_discrete(labels = c("2022-01-10", "2022-01-11", "2022-01-12", "2022-01-13", "2022-01-14", "2022-01-17", "2022-01-18", "2022-01-19", "2022-01-20", "2022-01-21")) +
+  # change background
+  theme_minimal() +
+  # change the position of the legend
+  theme(legend.position = "bottom") 
+
+```
+
+The x axis is year and y axis is yield to maturity. There are 10 curves in figure 1 and each stands for one date with identified color. Each line has the similar tendency -- may growing with decreasing growth rate with the shape of the curve seems to convex upward. (we couldn't know for sure, and it need more analysis.)
+
+```{r, echo = FALSE, message = FALSE}
+# let's do the interpolation for the obtained ytm above
+# since we need to use exactly 1-year yield in Q5 and Q6 and
+# we only have ytm for approximately years until maturity:
+# 1.2, 2.2, 3.2, 4.2 and 5.2
+# so I choose to fit linear regression model for collected date on each date
+# thus we will have 11 linear regression model
+# note: linear regression model may not be the best fitted model for the data
+# however since we do not have too much data (11 data in one model)
+# the estimated ytms could be closed to the real ones 
+# y = beta_0 + beta_1 * x
+# H0: beta_1 = 0; H1: beta_1 != 0
+# H0: beta_0 = 0; H1: beta_0 != 0
+
+# select ytm data and the corresponding years until maturity from data
+ytm_0110 <- data[,27]
+years_until_maturity_0110 <- data[,38]
+# combine ytm data and the corresponding years until maturity to a data frame
+data_ytm_0110 <- data.frame(ytm_0110, years_until_maturity_0110)
+# fit linear regression model with ytm data as the dependent variable and
+# years until maturity as the independent variable
+yield_model_1 <- lm(ytm_0110~years_until_maturity_0110,  data = data_ytm_0110)
+# summary model to find the p-value
+# (the summary table is not shown in the knitted pdf)
+# since p-value for both beta_0 and beta_1 are smaller than 0.05
+# there exists significant difference, so we need to reject H0: beta_1 = 0
+# same situation for beta_0
+summary_1 <- summary(yield_model_1)
+# create the data frame that contains years until maturity that 
+# needs to be used for estimate ytm
+new_year_0110 = data.frame(years_until_maturity_0110 = c(1,2,3,4,5))
+# find the estimated ytm in years until maturity 1, 2, 3, 4, and 5
+new_ytm_0110 <- predict(yield_model_1, newdata = new_year_0110)
+
+# conclusion for linear regression model below are similar as the first model
+
+# select ytm data and the corresponding years until maturity from data
+ytm_0111 <- data[,28]
+# combine ytm data and the corresponding years until maturity to a data frame
+years_until_maturity_0111 <- data[,39]
+data_ytm_0111 <- data.frame(ytm_0111, years_until_maturity_0111)
+yield_model_2 <- lm(ytm_0111~years_until_maturity_0111,  data = data_ytm_0111)
+summary_2 <- summary(yield_model_2)
+new_year_0111 = data.frame(years_until_maturity_0111 = c(1,2,3,4,5))
+new_ytm_0111 <- predict(yield_model_2, newdata = new_year_0111)
+
+# select ytm data and the corresponding years until maturity from data
+ytm_0112 <- data[,29]
+# combine ytm data and the corresponding years until maturity to a data frame
+years_until_maturity_0112 <- data[,40]
+data_ytm_0112 <- data.frame(ytm_0112, years_until_maturity_0112)
+yield_model_3 <- lm(ytm_0112~years_until_maturity_0112,  data = data_ytm_0112)
+summary_3 <- summary(yield_model_3)
+new_year_0112 = data.frame(years_until_maturity_0112 = c(1,2,3,4,5))
+new_ytm_0112 <- predict(yield_model_3, newdata = new_year_0112)
+
+# select ytm data and the corresponding years until maturity from data
+ytm_0113 <- data[,30]
+# combine ytm data and the corresponding years until maturity to a data frame
+years_until_maturity_0113 <- data[,41]
+data_ytm_0113 <- data.frame(ytm_0113, years_until_maturity_0113)
+yield_model_4 <- lm(ytm_0113~years_until_maturity_0113,  data = data_ytm_0113)
+summary_4 <- summary(yield_model_4)
+new_year_0113 = data.frame(years_until_maturity_0113 = c(1,2,3,4,5))
+new_ytm_0113 <- predict(yield_model_4, newdata = new_year_0113)
+
+# select ytm data and the corresponding years until maturity from data
+ytm_0114 <- data[,31]
+# combine ytm data and the corresponding years until maturity to a data frame
+years_until_maturity_0114 <- data[,42]
+data_ytm_0114 <- data.frame(ytm_0114, years_until_maturity_0114)
+yield_model_5 <- lm(ytm_0114~years_until_maturity_0114,  data = data_ytm_0114)
+summary_5 <- summary(yield_model_5)
+new_year_0114 = data.frame(years_until_maturity_0114 = c(1,2,3,4,5))
+new_ytm_0114 <- predict(yield_model_5, newdata = new_year_0114)
+
+# select ytm data and the corresponding years until maturity from data
+ytm_0117 <- data[,32]
+# combine ytm data and the corresponding years until maturity to a data frame
+years_until_maturity_0117 <- data[,43]
+data_ytm_0117 <- data.frame(ytm_0117, years_until_maturity_0117)
+yield_model_6 <- lm(ytm_0117~years_until_maturity_0117,  data = data_ytm_0117)
+summary_6 <- summary(yield_model_6)
+new_year_0117 = data.frame(years_until_maturity_0117 = c(1,2,3,4,5))
+new_ytm_0117 <- predict(yield_model_6, newdata = new_year_0117)
+
+# select ytm data and the corresponding years until maturity from data
+ytm_0118 <- data[,33]
+# combine ytm data and the corresponding years until maturity to a data frame
+years_until_maturity_0118 <- data[,44]
+data_ytm_0118 <- data.frame(ytm_0118, years_until_maturity_0118)
+yield_model_7 <- lm(ytm_0118~years_until_maturity_0118,  data = data_ytm_0118)
+summary_7 <- summary(yield_model_7)
+new_year_0118 = data.frame(years_until_maturity_0118 = c(1,2,3,4,5))
+new_ytm_0118 <- predict(yield_model_7, newdata = new_year_0118)
+
+# select ytm data and the corresponding years until maturity from data
+ytm_0119 <- data[,34]
+# combine ytm data and the corresponding years until maturity to a data frame
+years_until_maturity_0119 <- data[,45]
+data_ytm_0119 <- data.frame(ytm_0119, years_until_maturity_0119)
+yield_model_8 <- lm(ytm_0119~years_until_maturity_0119,  data = data_ytm_0119)
+summary_8 <- summary(yield_model_8)
+new_year_0119 = data.frame(years_until_maturity_0119 = c(1,2,3,4,5))
+new_ytm_0119 <- predict(yield_model_8, newdata = new_year_0119)
+
+# select ytm data and the corresponding years until maturity from data
+ytm_0120 <- data[,35]
+# combine ytm data and the corresponding years until maturity to a data frame
+years_until_maturity_0120 <- data[,46]
+data_ytm_0120 <- data.frame(ytm_0120, years_until_maturity_0120)
+yield_model_9 <- lm(ytm_0120~years_until_maturity_0120,  data = data_ytm_0120)
+summary_9 <- summary(yield_model_9)
+new_year_0120 = data.frame(years_until_maturity_0120 = c(1,2,3,4,5))
+new_ytm_0120 <-predict(yield_model_9, newdata = new_year_0120)
+
+# select ytm data and the corresponding years until maturity from data
+ytm_0121 <- data[,36]
+# combine ytm data and the corresponding years until maturity to a data frame
+years_until_maturity_0121 <- data[,47]
+data_ytm_0121 <- data.frame(ytm_0121, years_until_maturity_0121)
+yield_model_10 <- lm(ytm_0121~years_until_maturity_0121,  data = data_ytm_0121)
+summary_10 <- summary(yield_model_10)
+new_year_0121 = data.frame(years_until_maturity_0121 = c(1,2,3,4,5))
+new_ytm_0121 <- predict(yield_model_10, newdata = new_year_0121)
+
+# print the above summary tables
+kable(summary_1$coefficients, caption = "Summary of 2022.01.10 Model", digits = 5)
+kable(summary_2$coefficients, caption = "Summary of 2022.01.11 Model", digits = 5)
+kable(summary_3$coefficients, caption = "Summary of 2022.01.12 Model", digits = 5)
+kable(summary_4$coefficients, caption = "Summary of 2022.01.13 Model", digits = 5)
+kable(summary_5$coefficients, caption = "Summary of 2022.01.14", digits = 5)
+kable(summary_6$coefficients, caption = "Summary of 2022.01.17 Model", digits = 5)
+kable(summary_7$coefficients, caption = "Summary of 2022.01.18 Model", digits = 5)
+kable(summary_8$coefficients, caption = "Summary of 2022.01.19 Model", digits = 5)
+kable(summary_9$coefficients, caption = "Summary of 2022.01.20 Model", digits = 5) 
+kable(summary_10$coefficients, caption = "Summary of 2022.01.21 Model", digits = 5)
+
+# create a vector contains years until maturity
+new_years_until_maturity <- c(1,2,3,4,5)
+# combine new ytm data (11 group )and the corresponding years until maturity to a data frame
+ytm_new <- data.frame(new_ytm_0110, new_ytm_0111, new_ytm_0112, new_ytm_0113, new_ytm_0114,
+                      new_ytm_0117, new_ytm_0118, new_ytm_0119, new_ytm_0120, new_ytm_0121,
+                      new_years_until_maturity)
+
+```
+
+The last part is the interpolation for the obtained ytm above. Since we need to use exactly 1-year yield in Q5 and Q6 and  we only have ytm for approximately years until maturity: 1.2, 2.2, 3.2, 4.2 and 5.2, thus I choose to fit linear regression model for collected date on each date. And we will have 11 linear regression model in total. (Note: Linear regression model may not be the best fitted model for the data, however, since we do not have too much data (11 data in one model), the estimated ytms could be closed to the real ones.) From the summary table (which are shown in rmd) of each model, we observed that p-value for both $\beta_0$ and $\beta_1$ are smaller than 0.05. Thus there exists significant difference, so we need to reject $H_0: \beta_0 = 0$ and  $H_0: \beta_1 = 0$. And using the linear regression model, we predicted ytm with years until maturity: 1, 2, 3, 4, and 5 in each date, which is shown in table 2.
+
+```{r, echo = FALSE, message = FALSE}
+names(ytm_new) <- c(dates, "years until maturity")
+round(ytm_new, 4) %>% 
+  kable(caption = "Bonds’ Yield (YTM) with Maturity 1-5") %>% 
+  kable_styling("responsive", font_size = 6, full_width = T)
+```
+
+#### (b)
+
+$$
+\begin{aligned}
+& P_i = \sum_{i = 1}^{n} cash \ flow _i \times (1 + \frac{r(t_i)}{2})^{(-t_i \times 2)}
+\end{aligned}
+$$
+
+```{r, echo = FALSE, message = FALSE}
+# now we can calculate spot rate 
+# create a 11*10 matrix for storing spot rate 
+spot_rate <- matrix(0, nrow = length(time_interval), ncol = length(dates), byrow=TRUE)
+# give the row & the column name of spot rate 
+rownames(spot_rate) <- time_interval
+colnames(spot_rate)  <- dates
+# recall: P_i = sum_{i = 1}^{11} {{cash-flow_i}/(1 + (r_i/2)^(-t_i * 2)}
+# where r_i is the spot rate, P_i represents the dirty price and t_i is the years until maturity
+# use for loop to calculate spot rate
+for (i in 1:length(data$name)) for (j in 1:length(dates)){
+  # here we consider 11 cases 
+  if (i == 1) {
+    # let f(r) = P_ij - sum(cash_flow_i * (1+r/2)^(2*t_i)) for "CAN 0.5 Feb.28.22"
+    # i represents the ith bond and j represents the jth date that we collected data
+    # where r = ytm_ij exactly
+    spot_rate[i, j] <- ytm[i, j]
+  } # since the years until maturity for "CAN 2.75 May.31.22" is also in [0, 0.5]
+    # so spot rate here has the same situation as "CAN 0.5 Feb.28.22"
+    else if (i == 2) {
+    spot_rate[i, j] <- ytm[i, j]
+  } # let f(r_n) = P_ij - sum_{i = 1}^{n-1}(cash_flow_i * (1+r_i/2)^(2*t_i)) - cash_flow_n * (1+r/2)^(2*t_n)
+    # i represents the ith bond and j represents the jth date that we collected data
+    # {r_1j, ..., r_((n-1)j)} will given by steps above and so they are known
+    # the only unknown variable here is r_n
+    # uniroot() is a function in R that used to find the solution of the equation
+    # i.e. solve r for f(r_n) = 0 (n belongs to N and max(n) = 11)
+    else if (i == 3) {
+    spot_rate[i, j] <- uniroot(function(r) dirty_price[i, j] - 
+                                 (cash_flow[i,1] * (1 + spot_rate[1, j]/2) ^ (-years_until_maturity[1,j]*2)) -
+                                 (cash_flow[i,2] * (1 + spot_rate[2, j]/2) ^ (-years_until_maturity[2,j]*2)) -
+                                 (cash_flow[i,3] * (1 + r/2) ^ (- years_until_maturity[3,j] * 2)), 
+                               c(0, 1))$root 
+  } else if (i == 4) {
+    spot_rate[i, j] <- uniroot(function(r) dirty_price[i, j] - 
+                                 (cash_flow[i,1] * (1 + spot_rate[1, j]/2) ^ (-years_until_maturity[1,j]*2)) -
+                                 (cash_flow[i,2] * (1 + spot_rate[2, j]/2) ^ (-years_until_maturity[2,j]*2)) -
+                                 (cash_flow[i,3] * (1 + r/2) ^ (- years_until_maturity[4,j] * 2)), 
+                               c(0, 1))$root 
+  } else if (i == 5) {
+    spot_rate[i, j] <- uniroot(function(r) dirty_price[i, j] - 
+                                 (cash_flow[i,1] * (1 + spot_rate[1, j]/2) ^ (-years_until_maturity[1,j]*2)) -
+                                 (cash_flow[i,2] * (1 + spot_rate[2, j]/2) ^ (-years_until_maturity[2,j]*2)) -
+                                 (cash_flow[i,3] * (1 + spot_rate[3, j]/2) ^ (-years_until_maturity[3,j]*2)) -
+                                 (cash_flow[i,4] * (1 + spot_rate[4, j]/2) ^ (-years_until_maturity[4,j]*2)) -
+                                 (cash_flow[i,5] * (1 + r/2) ^ (- years_until_maturity[5,j] * 2)), 
+                               c(0, 1))$root
+  } else if (i == 6) {
+    spot_rate[i, j] <- uniroot(function(r) dirty_price[i, j] - 
+                                 (cash_flow[i,1] * (1 + spot_rate[1, j]/2) ^ (-years_until_maturity[1,j]*2)) -
+                                 (cash_flow[i,2] * (1 + spot_rate[2, j]/2) ^ (-years_until_maturity[2,j]*2)) -
+                                 (cash_flow[i,3] * (1 + spot_rate[3, j]/2) ^ (-years_until_maturity[3,j]*2)) -
+                                 (cash_flow[i,4] * (1 + spot_rate[4, j]/2) ^ (-years_until_maturity[4,j]*2)) -
+                                 (cash_flow[i,5] * (1 + spot_rate[5, j]/2) ^ (-years_until_maturity[5,j]*2)) -
+                                 (cash_flow[i,6] * (1 + r/2) ^ (- years_until_maturity[6,j] * 2)), 
+                               c(0, 1))$root
+  } else if (i == 7) {
+    spot_rate[i, j] <- uniroot(function(r) dirty_price[i, j] -
+                                 (cash_flow[i,1] * (1 + spot_rate[1, j]/2) ^ (-years_until_maturity[1,j]*2)) -
+                                 (cash_flow[i,2] * (1 + spot_rate[2, j]/2) ^ (-years_until_maturity[2,j]*2)) -
+                                 (cash_flow[i,3] * (1 + spot_rate[3, j]/2) ^ (-years_until_maturity[3,j]*2)) -
+                                 (cash_flow[i,4] * (1 + spot_rate[4, j]/2) ^ (-years_until_maturity[4,j]*2)) -
+                                 (cash_flow[i,5] * (1 + spot_rate[5, j]/2) ^ (-years_until_maturity[5,j]*2)) -
+                                 (cash_flow[i,6] * (1 + spot_rate[6, j]/2) ^ (-years_until_maturity[6,j]*2)) -
+                                 (cash_flow[i,7] * (1 + r/2) ^ (- years_until_maturity[7,j] * 2)), 
+                               c(0, 1))$root
+  } else if (i == 8) {
+    spot_rate[i, j] <- uniroot(function(r) dirty_price[i, j] - 
+                                 (cash_flow[i,1] * (1 + spot_rate[1, j]/2) ^ (-years_until_maturity[1,j]*2)) -
+                                 (cash_flow[i,2] * (1 + spot_rate[2, j]/2) ^ (-years_until_maturity[2,j]*2)) -
+                                 (cash_flow[i,3] * (1 + spot_rate[3, j]/2) ^ (-years_until_maturity[3,j]*2)) -
+                                 (cash_flow[i,4] * (1 + spot_rate[4, j]/2) ^ (-years_until_maturity[4,j]*2)) -
+                                 (cash_flow[i,5] * (1 + spot_rate[5, j]/2) ^ (-years_until_maturity[5,j]*2)) -
+                                 (cash_flow[i,6] * (1 + spot_rate[6, j]/2) ^ (-years_until_maturity[6,j]*2)) -
+                                 (cash_flow[i,7] * (1 + spot_rate[7, j]/2) ^ (-years_until_maturity[7,j]*2)) -
+                                 (cash_flow[i,8] * (1 + r/2) ^ (- years_until_maturity[8,j] * 2)),  
+                               c(0, 1))$root
+  } else if (i == 9) {
+    spot_rate[i, j] <- uniroot(function(r) dirty_price[i, j] - 
+                                 (cash_flow[i,1] * (1 + spot_rate[1, j]/2) ^ (-years_until_maturity[1,j]*2)) -
+                                 (cash_flow[i,2] * (1 + spot_rate[2, j]/2) ^ (-years_until_maturity[2,j]*2)) -
+                                 (cash_flow[i,3] * (1 + spot_rate[3, j]/2) ^ (-years_until_maturity[3,j]*2)) -
+                                 (cash_flow[i,4] * (1 + spot_rate[4, j]/2) ^ (-years_until_maturity[4,j]*2)) -
+                                 (cash_flow[i,5] * (1 + spot_rate[5, j]/2) ^ (-years_until_maturity[5,j]*2)) -
+                                 (cash_flow[i,6] * (1 + spot_rate[6, j]/2) ^ (-years_until_maturity[6,j]*2)) -
+                                 (cash_flow[i,7] * (1 + spot_rate[7, j]/2) ^ (-years_until_maturity[7,j]*2)) -
+                                 (cash_flow[i,8] * (1 + spot_rate[8, j]/2) ^ (-years_until_maturity[8,j]*2)) -
+                                 (cash_flow[i,9] * (1 + r/2) ^ (- years_until_maturity[9,j] * 2)), 
+                               c(0, 1))$root
+  } else if (i == 10) {
+    spot_rate[i, j] <- uniroot(function(r) dirty_price[i, j] - 
+                                 (cash_flow[i,1] * (1 + spot_rate[1, j]/2) ^ (-years_until_maturity[1,j]*2)) -
+                                 (cash_flow[i,2] * (1 + spot_rate[2, j]/2) ^ (-years_until_maturity[2,j]*2)) -
+                                 (cash_flow[i,3] * (1 + spot_rate[3, j]/2) ^ (-years_until_maturity[3,j]*2)) -
+                                 (cash_flow[i,4] * (1 + spot_rate[4, j]/2) ^ (-years_until_maturity[4,j]*2)) -
+                                 (cash_flow[i,5] * (1 + spot_rate[5, j]/2) ^ (-years_until_maturity[5,j]*2)) -
+                                 (cash_flow[i,6] * (1 + spot_rate[6, j]/2) ^ (-years_until_maturity[6,j]*2)) -
+                                 (cash_flow[i,7] * (1 + spot_rate[7, j]/2) ^ (-years_until_maturity[7,j]*2)) -
+                                 (cash_flow[i,8] * (1 + spot_rate[8, j]/2) ^ (-years_until_maturity[8,j]*2)) -
+                                 (cash_flow[i,9] * (1 + spot_rate[9, j]/2) ^ (-years_until_maturity[9,j]*2)) -
+                                 (cash_flow[i,10] * (1 + r/2) ^ (- years_until_maturity[10,j] * 2)), 
+                               c(0, 1))$root
+  } else if (i == 11) {
+    spot_rate[i, j] <- uniroot(function(r) dirty_price[i, j] - 
+                                 (cash_flow[i,1] * (1 + spot_rate[1, j]/2) ^ (-years_until_maturity[1,j]*2)) -
+                                 (cash_flow[i,2] * (1 + spot_rate[2, j]/2) ^ (-years_until_maturity[2,j]*2)) -
+                                 (cash_flow[i,3] * (1 + spot_rate[3, j]/2) ^ (-years_until_maturity[3,j]*2)) -
+                                 (cash_flow[i,4] * (1 + spot_rate[4, j]/2) ^ (-years_until_maturity[4,j]*2)) -
+                                 (cash_flow[i,5] * (1 + spot_rate[5, j]/2) ^ (-years_until_maturity[5,j]*2)) -
+                                 (cash_flow[i,6] * (1 + spot_rate[6, j]/2) ^ (-years_until_maturity[6,j]*2)) -
+                                 (cash_flow[i,7] * (1 + spot_rate[7, j]/2) ^ (-years_until_maturity[7,j]*2)) -
+                                 (cash_flow[i,8] * (1 + spot_rate[8, j]/2) ^ (-years_until_maturity[8,j]*2)) -
+                                 (cash_flow[i,9] * (1 + spot_rate[9, j]/2) ^ (-years_until_maturity[9,j]*2)) -
+                                 (cash_flow[i,10]*(1 + spot_rate[10, j]/2)^(-years_until_maturity[10,j]* 2)) -
+                                 (cash_flow[i,11] * (1 + r/2) ^ (- years_until_maturity[11,j] * 2)), 
+                               c(0, 1))$root
+  }
+}  
+
+# add spot rate in data by column
+for (i in 1:length(dates)){
+  # add each column of spot rate to data
+  data <- cbind(data, spot_rate[, i])
+}
+# rename the adding columns
+names(data)[48: 57] <- c("spot_rate_0110", "spot_rate_0111", "spot_rate_0112", "spot_rate_0113", "spot_rate_0114", "spot_rate_0117", "spot_rate_0118", "spot_rate_0119", "spot_rate_0120", "spot_rate_0121")
+ 
+```
+
+Recall: $P_n = \sum_{i = 1}^{n} {{cash \ flow_i} \times (1 + \frac{r_i}{2})^{-2 t_i}}$, where $n \in [1, 11]$, where $r_i$ is the spot rate, $P_i$ represents the dirty price and $t_i$ is the years until maturity. The difference between calculating YTM and spot rate is YTM has same r for one equation while spot rate has different r for one equation. 
+
+The pseudo-code for calculating spot rate:
+
+Recall time\_interval is a vector with elements 0.5-1 year, 1-1.5 year, 1.5-2 year, 2-2.5 year, 2.5-3 year, 3-3.5 year, 3.5-4 year, 4-4.5 year, 4.5-5 year and 5+ year; dates is a vector with elements 2022/01/10, 2022/01/11, 2022/01/12, 2022/01/13, 2022/01/14, 2022/01/17, 2022/01/18, 2022/01/19, 2022/01/20, and 2022/01/21; years\_until\_maturity is a 11 $\times$ 10 matrix, and years\_until\_maturity[i,j] represents the years until maturity for $i^{th}$ date and $j^{th}$ bond in data set; cash\_flow is a 11 $\times$ 11 matrix and cash\_flow[i,j] represents the cash flow for $i^{th}$ bond in $j^{th}$ year interval.
+
+$$
+\begin{aligned}
+& let \ spot\_rate \ be \ a \ new \ 11 \times 10 \ matrix \ with \ all \ original \ elements \ are \ 0 \\
+& let \ the \ row \ name \ of \ spot\_rate \ be \ time\_interval \\
+& let \ the \ column \ name \ of \ spot\_rate \ be \ dates \\
+& for \ i \ in \ the \ range \ of \ \# \ of \ row \\
+& \qquad for \ j \ in \ the \ range \ of \ \# \ of \ column \\
+& \qquad \qquad there \ are \ 11 \ cases \ in \ total \\
+& \qquad \qquad if \ i == 1 \ and \ i == 2 \\
+& \qquad \qquad \qquad // \ since \  years\_until\_maturity[2,j] < 0.5 \\
+& \qquad \qquad \qquad // \ so \ spot\_rate[1,j] \ and \ spot\_rate[2,j] will \ be \ calculated \ by \ the \ same method \\
+& \qquad \qquad \qquad spot\_rate[i,j] \leftarrow ytm[i,j] \\
+& \qquad \qquad else \ if \ i == 3 \\
+& \qquad \qquad \qquad let \ f(r) = cash\_flow[i,1]*(1 + spot\_rate[1, j]/2)^{-years\_until\_maturity[1,j]*2} \\
+& \qquad \qquad \qquad \qquad \quad - cash\_flow[i,2]*(1 + spot\_rate[2,j]/2)^{-years\_until\_maturity[2,j]*2} \\
+& \qquad \qquad \qquad \qquad \quad -cash\_flow[i,3]*(1 + r/2)^{- years\_until\_maturity[3,j] * 2} \\
+& \qquad \qquad \qquad spot\_rate[i,j] \leftarrow uniroot(f(r), c(0,1))\$root \\
+& \qquad \qquad else \ if \ i == 4 \\
+& \qquad \qquad \qquad // \ since \  years\_until\_maturity[4,j] < 1.5 \\
+& \qquad \qquad \qquad // \ so \ spot\_rate[3,j] \ and \ spot\_rate[4,j] will \ be \ calculated \ by \ the \ same method \\
+& \qquad \qquad \qquad let \ f(r) = cash\_flow[i,1]*(1 + spot\_rate[1, j]/2)^{-years\_until\_maturity[1,j]*2} \\
+& \qquad \qquad \qquad \qquad \quad - cash\_flow[i,2]*(1 + spot\_rate[2,j]/2)^{-years\_until\_maturity[2,j]*2} \\
+& \qquad \qquad \qquad \qquad \quad -cash\_flow[i,3]*(1 + r/2)^{- years\_until\_maturity[4,j] * 2} \\
+& \qquad \qquad \qquad spot\_rate[i,j] \leftarrow uniroot(f(r), c(0,1))\$root \\
+& \qquad \qquad // \ r \ in \ the \ remaining \ cases \ is \ consistent \ with \ the \ calculation \ method \ of \ r \ in \ case \ i == 3 \\
+& \qquad \qquad else \ if \ i == 5 \\
+& \qquad \qquad \vdots \\
+& \qquad \qquad \vdots \\
+& \qquad \qquad else \ if \ i == 11 \\
+& \qquad \qquad \qquad \cdots \\
+& // \ now \ we \ are \ done \ for \ calculated \ spot \ rate 
+\end{aligned}
+$$ 
+            
+And here is the plot for spot rate: 
+          
+```{r, echo = FALSE, message = FALSE, fig.width=11, fig.height=5, fig.cap = "5-Year Spot Rate Curve for the Selected 11 Bonds"}
+# plot the 5-year spot rate as a line chart for 11 bonds 
+data %>% ggplot(aes(x = years_until_maturity_0110, y = spot_rate_0110, color = "2022-01-10")) +
+  # add points for spot_rate_0110  and set size
+  geom_point(size = 1) +
+  # add the rest of the spot rate data as well, each with unit and same size
+  geom_point(data = data, aes(x = years_until_maturity_0111, y = spot_rate_0111, color = "2022-01-11"), size = 1) +
+  geom_point(data = data, aes(x = years_until_maturity_0112, y = spot_rate_0112, color = "2022-01-12"), size = 1) +
+  geom_point(data = data, aes(x = years_until_maturity_0113, y = spot_rate_0113, color = "2022-01-13"), size = 1) +
+  geom_point(data = data, aes(x = years_until_maturity_0114, y = spot_rate_0114, color = "2022-01-14"), size = 1) +
+  geom_point(data = data, aes(x = years_until_maturity_0117, y = spot_rate_0117, color = "2022-01-17"), size = 1) +
+  geom_point(data = data, aes(x = years_until_maturity_0118, y = spot_rate_0118, color = "2022-01-18"), size = 1) +
+  geom_point(data = data, aes(x = years_until_maturity_0119, y = spot_rate_0119, color = "2022-01-19"), size = 1) +
+  geom_point(data = data, aes(x = years_until_maturity_0120, y = spot_rate_0120, color = "2022-01-20"), size = 1) + 
+  geom_point(data = data, aes(x = years_until_maturity_0121, y = spot_rate_0121, color = "2022-01-21"), size = 1) +
+  # add line for spot_rate_0110  and set size
+  geom_line(size = 0.3) +
+  # add the rest of the spot_rate data as well, each with unit and same size
+  geom_line(data = data, aes(x = years_until_maturity_0111, y = spot_rate_0111, color = "2022-01-11"), size = 0.3) +
+  geom_line(data = data, aes(x = years_until_maturity_0112, y = spot_rate_0112, color = "2022-01-12"), size = 0.3) +
+  geom_line(data = data, aes(x = years_until_maturity_0113, y = spot_rate_0113, color = "2022-01-13"), size = 0.3) +
+  geom_line(data = data, aes(x = years_until_maturity_0114, y = spot_rate_0114, color = "2022-01-14"), size = 0.3) +
+  geom_line(data = data, aes(x = years_until_maturity_0117, y = spot_rate_0117, color = "2022-01-17"), size = 0.3) +
+  geom_line(data = data, aes(x = years_until_maturity_0118, y = spot_rate_0118, color = "2022-01-18"), size = 0.3) +
+  geom_line(data = data, aes(x = years_until_maturity_0119, y = spot_rate_0119, color = "2022-01-19"), size = 0.3) +
+  geom_line(data = data, aes(x = years_until_maturity_0120, y = spot_rate_0120, color = "2022-01-20"), size = 0.3) +
+  geom_line(data = data, aes(x = years_until_maturity_0121, y = spot_rate_0121, color = "2022-01-21"), size = 0.3) +
+  # set the caption and the title of  x & y axis
+  labs(x = "Year",  
+       y = "Spot Rate",
+       caption = "Created by Minhui Yu in APM466/MAT1856, Winter 2022") +
+  # delete the title of the legend
+  guides(color = guide_legend(title = NULL)) +
+  # change the name of each legend to related date
+  scale_color_discrete(labels = c("2022-01-10", "2022-01-11", "2022-01-12", "2022-01-13", "2022-01-14", "2022-01-17", "2022-01-18", "2022-01-19", "2022-01-20", "2022-01-21")) +
+  # change background
+  theme_minimal() +
+  # change the position of the legend
+  theme(legend.position = "bottom") 
+
+```
+
+The spot rate curves is very similar to the bond's yield curves. They both have years on the x axis, and the y axis of the spot rate curve is the spot rate. The reason is that spot rate is also known as the zero interest rate which means we find it by discount the cash flow and discount rate is what we need.
+
+#### (c)
+
+For forward rate we have the equation below, where t represents the years until maturity and $s_t$ represents the spot rate with years until maturity t, $f_{1yr, \ iyr}$ represents the forward rate starting in one year and going i more years where i $\in$ \{1, 2, 3, 4\}. The reason why I choose spot\_rate[3,j] is the years until maturity of spot\_rate[2,j] is about 0.333 while the years until maturity of spot\_rate[3,j] is about 1.1 which is more closer to 1 year.
+$$
+\begin{aligned}
+\qquad (1 + \frac{f_{t-i,\ t}}{2})^{t-(t-i)} = \frac{(1+s_t)^t}{(1+s_{t-i})^{t-i}} & \Rightarrow f_{t-i,\ t} = 2 \times \left[ \sqrt[i]{\frac{(1+s_t)^t}{(1+s_{t-i})^{t-i}}} - 1 \right] \\
+(focus \ on \ the \ data \ in \ one \ date) & \Rightarrow f_{1yr-iyr} = f_{3,\ 2i + 1} = 2 \times \left[ \sqrt[2i-2]{\frac{(1+s_{2i + 1})^{2i + 1}}{(1+s_{3})^{3}}} - 1 \right]
+\end{aligned}
+$$
+            
+The pseudo-code for calculating forward rate: 
+$$
+\begin{aligned}
+& let \ forward\_rate \ be \ a \ new \ 4 \times 10 \ matrix \ with \ all \ original \ elements \ are \ 0 \\
+& let \ f\_time\_interval \ be \ a \ vector \ with \ given \ year \ interval \ inside \\
+& // \ given \ year \ interval \ are \ 1yr-1yr, \ 1yr-2yr, \ 1yr-3yr, \ and \ 1yr-4yr \\
+& let \ the \ row \ name \ of \ forward\_rate \ be \ f\_time\_interval \\
+& let \ the \ column \ name \ of \ forward\_rate \ be \ dates \\
+& for \ i \ in \ the \ range \ of \ \# \ of \ row \\
+& \qquad for \ j \ in \ the \ range \ of \ \# \ of \ column \\
+& \qquad \qquad let \ forward\_rate[i,j] \leftarrow 2*(((1+spot\_rate[2(i+1)+1,j]/2)^{years\_until\_maturity[(i+1)*2+1,j]} \\
+& \qquad \qquad \qquad \qquad \qquad \qquad \qquad \qquad /(1+spot\_rate[3,j]/2)^{years\_until\_maturity[3,j]}) \\ 
+& \qquad \qquad \qquad \qquad \qquad \qquad \qquad \qquad ^{(1/(years\_until\_maturity[2(i+1)+1,j] -years\_until\_maturity[3,j]))} -1) \\
+& // \ now \ we \ are \ done \ for \ calculated \ forward \ rate 
+\end{aligned}
+$$
+
+And here is the plot for forward rate: 
+
+```{r, echo = FALSE, message = FALSE}
+# create f_time_interval with given year interval inside
+f_time_interval <- c("1yr-1yr", "1yr-2yr", "1yr-3yr", "1yr-4yr")
+# create a 4*10 matrix for storing forward rate 
+forward_rate_matrix <- matrix(0, 
+                       nrow = length(f_time_interval), 
+                       ncol = length(dates), byrow=TRUE)
+# give the row & the column name of spot rate 
+rownames(forward_rate_matrix) <- f_time_interval
+colnames(forward_rate_matrix)  <- c("forward_rate_0110", "forward_rate_0111", 
+                         "forward_rate_0112", "forward_rate_0113", 
+                         "forward_rate_0114", "forward_rate_0117",
+                         "forward_rate_0118", "forward_rate_0119", 
+                         "forward_rate_0120", "forward_rate_0121")
+# use for loop to find the required forward rate
+for (j in 1:length(dates)) for (i in 1:length(f_time_interval)) {
+  # since we have (1 + (f_{t-i, t})/2)^i = (1+s_t)^t/(1+s_{t-i})^(t-i)
+  # then , f_{t-i, t} = 2 * [((1+s_t)^t/(1+s_{t-i})^(t-i))^(1/i) - 1]
+  # the reason why I choose spot_rate[3,j] is the years until maturity of spot_rate[2,j] is about 0.333
+  # and the years until maturity of spot_rate[3,j] is about 1.1 which is more closer to year 1 
+  forward_rate_matrix[i,j] <- 2*(((1+spot_rate[(i+1)*2+1,j]/2)^years_until_maturity[(i+1)*2+1,j] /
+                          (1+spot_rate[3,j]/2)^years_until_maturity[3,j])
+                          ^(1/(years_until_maturity[(i+1)*2+1,j] - years_until_maturity[3,j])) -1)
+}
+
+# create a vector forward_rate_data for storing all forward rate from forward rate matrix above
+forward_rate_data <- numeric(40)
+# assign forward_rate_0110 to forward_rate_data
+forward_rate_data[1:4] <- forward_rate_matrix[,1]
+# use for loop to assign the remain forward_rate to forward_rate_data
+for (i in 1:length(dates)-1) {
+  # assign forward_rate_data by column of forward_rate_matrix
+  forward_rate_data[(4*i+1):(4*(i+1))] <- forward_rate_matrix[,i+1]
+}
+# create forward_rate_group for identify which date of data this forward rate is based on 
+forward_rate_group <- rep(colnames(forward_rate_matrix), each = length(f_time_interval))
+# create time_interval_group for identify the time interval of forward rate
+time_interval_group <- rep(f_time_interval, length(dates))
+# combine forward_rate_group, forward_rate_data and time_interval_group to a data frame
+# doing this is convenient when derive the 1-year forward curve with terms ranging from 2-5 years 
+forward_rate <- data.frame(forward_rate_group,
+                           forward_rate_data,
+                           time_interval_group)
+```
+
+```{r, echo = FALSE, message = FALSE, fig.width=11, fig.height=5, fig.cap = "1-Year Forward Rate Curve with Terms Ranging from 2-5 Years for the Selected 11 Bonds"}
+# plot the 1-year forward rate as a line chart for 11 bonds 
+forward_rate %>% ggplot(mapping = aes(x = time_interval_group, 
+                                      y = forward_rate_data, 
+                                      group = forward_rate_group, 
+                                      color = forward_rate_group)) +
+  # change the range of y axis
+  ylim(0.0120, 0.020) +
+  # add points for forward rate and set size
+  geom_point(size = 1) +
+  # add line for forward rate  and set size
+  geom_line(size = 0.3) +
+  # set the caption and the title of  x & y axis
+  labs(x = "Year Interval",  
+       y = "Forward Rate",
+       caption = "Created by Minhui Yu in APM466/MAT1856, Winter 2022") +
+  # delete the title of the legend
+  guides(color = guide_legend(title = NULL)) +
+  # change the name of each legend to related date
+  scale_color_discrete(labels = c("2022-01-10", "2022-01-11", "2022-01-12", "2022-01-13", "2022-01-14", "2022-01-17", "2022-01-18", "2022-01-19", "2022-01-20", "2022-01-21")) +
+  # change background
+  theme_minimal() +
+  # change the position of the legend
+  theme(legend.position = "bottom") 
+```
+
+The x axis is time interval  1yr-1yr, 1yr-2yr, 1yr-3yr, and 1yr-4yr and the y axis is forward rate. There are 10 curves in figure 1 and each stands for one date with identified color. Most curve shows that the forward rate will increase for long time interval. Note that the forward rate here from derivation is implicit and does not represent the market's expectation of forward rate
+
+\newpage
+
+### 5.
+
+```{r, echo = FALSE, message = FALSE}
+# find the daily log-returns of yield matrix
+# create a 10 * 5 matrix for storing daily log-returns of yield matrix
+log_returns_of_yield <- matrix(0, 
+                               nrow = (length(dates)-1), 
+                               ncol = length(new_years_until_maturity), byrow=TRUE)
+# give the row & the column name of daily log-returns of yield matrix
+rownames(log_returns_of_yield)  <- c("0110-0111", "0111-0112", "0112-0113", "0113-0114", "0114-0117",
+                                   "0117-0118", "0118-0119", "0119-0120", "0120-0121")
+colnames(log_returns_of_yield) <- c("year_1", "year_2", "year_3", "year_4", "year_5")
+# use for loop to find the daily log-returns of yield 
+for (i in 1:length(new_years_until_maturity)) for (j in 1: (length(dates)-1)){
+  log_returns_of_yield[j,i] <- log(ytm_new[i,j+1] / ytm_new[i,j])
+}
+
+# find the covariance matrix (5 * 5) 
+# based on the daily log-returns of yield matrix use cov()
+covariance_matrix_log_returns_ytm <- cov(log_returns_of_yield, log_returns_of_yield)
+```
+
+```{r, echo = FALSE, message = FALSE}
+# find the daily log-returns of forward rate matrix
+# create a 10 * 5 matrix for storing daily log-returns of forward rate matrix
+log_returns_of_forward_rate <- matrix(0, 
+                               nrow = (length(dates)-1), 
+                               ncol = length(f_time_interval), byrow=TRUE)
+# give the row & the column name of daily log returns of forward rate
+rownames(log_returns_of_forward_rate)  <- c("0110-0111", "0111-0112", "0112-0113", "0113-0114", "0114-0117",
+                                   "0117-0118", "0118-0119", "0119-0120", "0120-0121")
+colnames(log_returns_of_forward_rate) <- f_time_interval
+# use for loop to find the daily log-returns of yield 
+for (i in 1:length(f_time_interval)) for (j in 1: (length(dates)-1)){
+  log_returns_of_forward_rate[j,i] <- log(forward_rate_matrix[i,j+1] / forward_rate_matrix[i,j])
+}
+
+# find the covariance matrix (4 * 4) 
+# based on the daily log-returns of forward rate matrix use cov()
+covariance_matrix_log_returns_f <- cov(log_returns_of_forward_rate, log_returns_of_forward_rate)
+```
+
+Let $C_1$  =  Cov(log-return of yield) and $C_2$ = Cov(log-return of forward rate). Since log-return of yield is calculated by yield in table 2 above which has 5 year's yield, then log-return of yield is a 9 $\times$ 5 matrix where 10 represents there are 9 $day_i$-$day_{i+1}$ differences with 10 date in original and 5 represents 1-year, 2-year, \dots, 5-year time series. Similarly, log-return of forward rate is a 9 $\times$ 4 matrix with 4 year interval as the same in Q4.(c). Since we focus on times series for both daily return-log yield and forward rate, then when we calculate the covariance of them respectively based on the formula: $cov\left( \sum_{i=1}^n X_i, \ \sum_{i=1}^n X_i \right) = var\left( \sum_{i=1}^n X_i \right)$ where $X_i$ has a time series $X_{i,\ j} = \log(r_{i, \ j+1} / r_{i, \ j})$. And based on the discussion above, n = 5 for $C_1$ and n = 4 for $C_2$, j $\in$ \{1, 2, \dots, 9\}. The time series $X_{i, \ j}$ is essentially the rate of return on the term as it compounds to infinity and logarithms are additive. So $X_{i, \ j}$ represents the log difference between rate $r_{i, \ j+1}$ and $r_{i, \ j}$ and it can also eliminate part of the linear influence ( degree of independent) between  $r_{i, \ j+1}$ and $r_{i, \ j}$ -- the covariance became smaller.
+
+```{r, echo = FALSE, message = FALSE}
+round(covariance_matrix_log_returns_ytm, 5) %>% 
+  kable(caption = "Covariance Matrix for Dailylog-Returns of Yield") %>% 
+  kable_styling("responsive", font_size = 6, full_width = T)
+round(covariance_matrix_log_returns_f, 5) %>% 
+  kable(caption = "Covariance Matrix for Dailylog-Returns of Forward Rate") %>% 
+  kable_styling("responsive", font_size = 6, full_width = T)
+```
+
+### 6.
+
+```{r, echo = FALSE, message = FALSE}
+# use function eigen() to calculate the eigenvalues and eigenvectors of both covariance matrices
+eigen_covariance_matrix_log_returns_ytm <- eigen(covariance_matrix_log_returns_ytm, symmetric = TRUE)
+eigen_covariance_matrix_log_returns_f <- eigen(covariance_matrix_log_returns_f, symmetric = TRUE)
+# get the eigenvalues of both covariance matrices
+eigenvalues_ytm <- eigen_covariance_matrix_log_returns_ytm$values
+eigenvalues_f <- eigen_covariance_matrix_log_returns_f$values
+# get the eigenvectors of both covariance matrices
+eigenvectors_ytm <- round(eigen_covariance_matrix_log_returns_ytm$vectors, digits = 3)
+eigenvectors_f <- round(eigen_covariance_matrix_log_returns_f$vectors, digits = 3)
+```
+
+Here are the eigenvalues and the eigenvectors of the covariance matrix for dailylog-returns of yield.
+
+$$
+\begin{array}{ll}
+\begin{pmatrix} 
+\lambda_{y_1} \\ 
+\lambda_{y_2} \\
+\lambda_{y_3} \\        
+\lambda_{y_4} \\
+\lambda_{y_5} \\
+\end{pmatrix} = \begin{pmatrix}
+3.9616 \times 10^{-3}  \\
+4.1833 \times 10^{-4} \\
+3.2897 \times 10^{-8} \\
+1.0236 \times 10^{-12} \\
+6.7514 \times 10^{-18}
+\end{pmatrix}, \quad
+\begin{pmatrix} 
+\xi_{y_1} \\ 
+\xi_{y_2} \\
+\xi_{y_3} \\ 
+\xi_{y_4} \\
+\xi_{y_5} \\
+\end{pmatrix} = \begin{pmatrix}
+0.625 &  0.590 & -0.480 & -0.173 & -0.033 \\
+0.495 &  0.108 & 0.534 & 0.628 & 0.252 \\
+0.405 & -0.216 & 0.454 & -0.409 & -0.645 \\
+0.340 & -0.450 & 0.015 & -0.475 & 0.676 \\
+0.291 & -0.626 & -0.527 & 0.428 & -0.250
+\end{pmatrix}
+\end{array}
+$$
+
+Here are the eigenvalues and the eigenvectors of the covariance matrix for dailylog-returns of forward rate
+
+$$
+\begin{array}{ll} 
+\begin{pmatrix} 
+\lambda_{f_1} \\ 
+\lambda_{f_2} \\
+\lambda_{f_3} \\   
+\lambda_{f_4}
+\end{pmatrix} = \begin{pmatrix}
+2.0363 \times 10^{-3}  \\
+8.1254 \times 10^{-5} \\
+1.3659 \times 10^{-5} \\
+1.7300 \times 10^{-6}
+\end{pmatrix}, \quad
+\begin{pmatrix} 
+\xi_{f_1} \\ 
+\xi_{f_2} \\
+\xi_{f_3} \\ 
+\xi_{f_4} 
+\end{pmatrix}= \begin{pmatrix}
+-0.514 & 0.782 & 0.352 & 0.006 \\
+-0.513 & 0.042 & -0.841 & -0.166 \\
+-0.500 & -0.502 & 0.395 & -0.585 \\
+-0.472 & -0.366 & 0.113 & 0.794
+\end{pmatrix}
+\end{array}
+$$
+
+$\lambda_{y_1}$ is corresponding to $\xi_{y_1}$. $\lambda_{y_1}$ is the variance of the corresponding dimension of the data after transformation and implies the contribution of $\xi_{y_1}$ to the covariance matrix of log-return yield with percentage $\lambda_{y_1} \sum_{i = 1}^5 \lambda_{y_i}$. $\xi_{y_1}$ implies the direction of change in yield., which is in the wave.
+
+
+## References and GitHub Link to Code
+
+[1] Oeis.org. 2019. List of LaTeX mathematical symbols - OeisWiki. [online] Available at: <https://oeis.org/wiki/List_of_LaTeX_mathematical_symbols> [Accessed 14 February 2022].
+
+[2] Latex mathematical Formulas. "Latex mathematical Formulas - detailed tutorial" Published October 2020. https://blog.csdn.net/NSJim/article/details/109045914 
+
+[3] Rpubs.com. 2022. RPubs - Bond Valuation and Analysis in R. Accessed 14 February 2022. https://rpubs.com/Sergio_Garcia/bond_valuation_analysis_r
+
+Github Link: https://github.com/minhui-yu-helen/APM466H1-Assignment-1.git
